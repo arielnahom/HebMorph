@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HebMorph Rearchitecture Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { border-bottom: 2px solid #2c3e50; padding-bottom: 10px; color: #2c3e50; }
+        h2 { color: #2980b9; margin-top: 30px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; color: #155724; padding: 10px; border-radius: 4px; }
+        .todo { background-color: #fff3cd; border-color: #ffeeba; color: #856404; padding: 10px; border-radius: 4px; }
+        code { background-color: #f8f9fa; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        .module { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>HebMorph Migration & Rearchitecture Report</h1>
+
+    <div class="success">
+        <strong>Status:</strong> The core logic of HebMorph has been successfully extracted from Java/Elasticsearch and rewritten into a decoupled, standalone C# (.NET 10) architecture.
+    </div>
+
+    <h2>1. The "Split-Way" Architecture</h2>
+    <p>To ensure components can be used independently (e.g., just the Tokenizer, or just the Lemmatizer) and are Elasticsearch-agnostic, the project was split into several distinct C# Class Libraries under the new <code>HebMorphCsharp</code> root folder:</p>
+
+    <div class="module">
+        <h3>HebMorph.Core</h3>
+        <p>Contains the absolute linguistic truth: constants, character mapping (Niqqud, Geresh, Makaf), and shared interfaces (like <code>MorphData</code> and <code>MorphType</code>). It has zero external dependencies.</p>
+    </div>
+
+    <div class="module">
+        <h3>HebMorph.Dictionary</h3>
+        <p>Handles the loading and querying of the morphological dictionary. It implements a clean <code>IMorphologicalDictionary</code> interface.</p>
+        <ul>
+            <li><strong>Extendable Data:</strong> The interface abstracts the backend. Currently, an <code>FstDictionary</code> wrapper has been provided to prepare for Lucene.NET 4.8 FST implementations.</li>
+            <li><strong>Replacable:</strong> You can inject custom logic (like reading JSON/CSV files) to supplement or replace the binary HSpell wgz files.</li>
+        </ul>
+    </div>
+
+    <div class="module">
+        <h3>HebMorph.Tokenizer</h3>
+        <p>A pure C# Hebrew Tokenizer that respects academy rules regarding punctuation. It operates solely on strings and outputs custom <code>Token</code> objects, entirely separate from Lucene's TokenStream.</p>
+    </div>
+
+    <div class="module">
+        <h3>HebMorph.Lemmatizer</h3>
+        <p>The brain of the operation. It takes tokens and resolves them to their base lemmas, applying tolerances (Ktiv Male/Haser) and stripping prefixes.</p>
+    </div>
+
+    <div class="module">
+        <h3>HebMorph.WorkerService</h3>
+        <p>A standalone .NET Worker Service demonstrating how to run the analyzers as a background daemon (e.g., listening to a queue and preprocessing text before it is sent to Elastic/OpenSearch).</p>
+    </div>
+
+    <h2>2. Addressed TODOs & Business Rules</h2>
+    <p>During the migration, several legacy TODOs in the Java codebase were resolved using standard Hebrew linguistic rules:</p>
+
+    <ul>
+        <li><span class="todo">Tokenizer: Makaf Shortening (י-ם)</span> - Makafs are now retained inside tokens if they are surrounded by valid Hebrew letters, allowing the Lemmatizer to see the exact abbreviation instead of splitting it into "י" and "ם".</li>
+        <li><span class="todo">Tokenizer: Abbreviations (פרופ')</span> - The Geresh/Gershayim characters are now parsed and kept inside the token boundaries, ensuring acronyms are passed intact to the Lemmatizer.</li>
+        <li><span class="todo">Lemmatizer: Stop Words</span> - Implemented stop word filtering during lemmatization. It flags tokens as <code>IsStopWord = true</code> and filters them out of the valid lemma list to prevent noise.</li>
+        <li><span class="todo">Lemmatizer: Gematria Test</span> - Implemented <code>GematriaCalculator</code>. The Lemmatizer detects valid Gematria structures (e.g., תשפ"ג) and assigns them an integer value rather than attempting to morphologically analyze them as standard nouns.</li>
+        <li><span class="todo">Lemmatizer: Scoring/Confidence</span> - Implemented a basic scoring mechanism (<code>CalculateScore</code>) that prefers exact morphological matches over prefix-stripped or Ktiv-tolerated matches.</li>
+        <li><span class="todo">Lemmatizer: Unknown Nouns</span> - If a word yields zero lemmas from the dictionary (and isn't a Gematria/Stopword), the original token is explicitly added back as a default lemma (with a 0 mask) to preserve it for downstream search, assuming it is a proper noun/name.</li>
+    </ul>
+
+    <h2>3. Future Steps & FST Dilemma</h2>
+    <p>We chose to use the modern <strong>Lucene.Net 4.8.0-beta</strong> for the FST data structures as requested. Because highly compressed FSTs in C# require tight control over primitive byte arrays, the <code>FstDictionary</code> class currently mocks the dictionary internally to prove the architectural flow. The next technical step would be porting the binary stream reader from <code>HSpellLoader.java</code> to feed directly into the <code>Lucene.Net.Util.Fst.Builder</code>.</p>
+    <p>Because the dictionary is behind the <code>IMorphologicalDictionary</code> interface, this future FST optimization can be done without altering a single line of the Tokenizer, Lemmatizer, or Worker Service.</p>
+
+</body>
+</html>
