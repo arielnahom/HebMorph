@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="HebMorph.Core/HebMorph.Core.csproj" />
+  <Project Path="HebMorph.Dictionary/HebMorph.Dictionary.csproj" />
+  <Project Path="HebMorph.Lemmatizer/HebMorph.Lemmatizer.csproj" />
+  <Project Path="HebMorph.Tokenizer/HebMorph.Tokenizer.csproj" />
+  <Project Path="HebMorph.WorkerService/HebMorph.WorkerService.csproj" />
+</Solution>

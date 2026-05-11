@@ -23,3 +23,7 @@ Backup/
 *.iml
 *.releaseBackup
 .DS_STORE
+*.class
+bin/
+obj/
+*.csv
